@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ISAVEPC — Control de Gastos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ═══════════════════════════════════════
+   VARIABLES & RESET
+═══════════════════════════════════════ */
+:root {
+  --bg:      #0d0f14;
+  --surface: #151820;
+  --card:    #1b1f2b;
+  --border:  #252a38;
+  --accent:  #4fffb0;
+  --accent2: #ff6b6b;
+  --accent3: #ffc75f;
+  --accent4: #a78bfa;
+  --text:    #e8eaf0;
+  --muted:   #6b7280;
+  --radius:  14px;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+
+/* ── NOISE OVERLAY ── */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")
+}
+
+/* ═══════════════════════════════════════
+   HEADER
+═══════════════════════════════════════ */
+header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(13,15,20,.92);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 20px;
+  display:flex;align-items:stretch;justify-content:space-between;gap:12px;
+}
+.header-left{
+  display:flex;align-items:center;gap:10px;
+  font-weight:800;font-size:1.15rem;letter-spacing:-.5px;
+  padding:14px 0;
+}
+.header-logo-icon{
+  width:28px;height:28px;background:var(--accent);
+  border-radius:6px;display:flex;align-items:center;justify-content:center;
+  color:#0d1a14;font-size:.85rem;font-weight:800;flex-shrink:0;
+}
+.header-left .brand-name{color:var(--text)}
+.header-left .brand-name span{color:var(--accent)}
+
+/* ── TABS ── */
+.tabs{display:flex;align-items:flex-end;gap:2px}
+.tab-btn{
+  background:none;border:none;cursor:pointer;
+  font-family:var(--sans);font-size:.78rem;font-weight:700;
+  letter-spacing:.05em;color:var(--muted);
+  padding:14px 18px 12px;
+  border-bottom:2px solid transparent;
+  transition:color .2s,border-color .2s;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ════════════════════════════════════════
+   WEEK SELECTOR DROPDOWN
+════════════════════════════════════════ */
+.week-selector{
+  position:relative;
+  align-self:center;
+  flex-shrink:0;
+}
+
+/* El botón del badge — ahora clickeable */
+.week-selector-btn{
+  font-family:var(--mono);font-size:.7rem;
+  background:var(--border);color:var(--muted);
+  padding:5px 10px 5px 12px;border-radius:20px;
+  border:1px solid transparent;
+  cursor:pointer;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;
+  transition:background .2s, border-color .2s, color .2s;
+  outline:none;
+}
+.week-selector-btn:hover{
+  background:rgba(79,255,176,.1);
+  border-color:rgba(79,255,176,.25);
+  color:var(--accent);
+}
+.week-selector-btn.open{
+  background:rgba(79,255,176,.12);
+  border-color:rgba(79,255,176,.35);
+  color:var(--accent);
+}
+/* Modo edición: tintado dorado */
+.week-selector-btn.edit-mode{
+  background:rgba(255,199,95,.15);
+  border-color:rgba(255,199,95,.35);
+  color:var(--accent3);
+}
+.wsb-chevron{
+  font-size:.6rem;
+  transition:transform .2s;
+  opacity:.7;
+}
+.week-selector-btn.open .wsb-chevron{ transform:rotate(180deg); }
+
+/* El menú flotante */
+.week-dropdown{
+  position:absolute;top:calc(100% + 10px);right:0;
+  min-width:230px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 16px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03);
+  overflow:hidden;
+  opacity:0;pointer-events:none;
+  transform:translateY(-8px) scale(.97);
+  transform-origin:top right;
+  transition:opacity .18s ease, transform .18s ease;
+  z-index:500;
+}
+.week-dropdown.open{
+  opacity:1;pointer-events:all;
+  transform:translateY(0) scale(1);
+}
+
+/* Cabecera del menú */
+.wdd-header{
+  padding:10px 14px 8px;
+  font-size:.58rem;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+
+/* Opciones del menú */
+.wdd-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;
+  cursor:pointer;
+  font-family:var(--mono);font-size:.75rem;
+  color:var(--muted);
+  transition:background .15s, color .15s;
+  border:none;background:none;width:100%;text-align:left;
+}
+.wdd-item:hover{
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+}
+.wdd-item.current{
+  color:var(--accent);
+  background:rgba(79,255,176,.06);
+}
+.wdd-item.current:hover{
+  background:rgba(79,255,176,.1);
+}
+.wdd-item.selected-hist{
+  color:var(--accent3);
+  background:rgba(255,199,95,.07);
+}
+.wdd-item-dot{
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;
+}
+.wdd-item-info{ flex:1;min-width:0; }
+.wdd-item-label{ font-weight:600;letter-spacing:-.01em;color:inherit }
+.wdd-item-sub{
+  font-size:.62rem;color:var(--muted);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.wdd-divider{
+  height:1px;background:var(--border);margin:4px 0;
+}
+/* scroll si hay muchas semanas */
+.wdd-scroll{
+  max-height:280px;overflow-y:auto;
+}
+.wdd-scroll::-webkit-scrollbar{width:3px}
+.wdd-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ═══════════════════════════════════════
+   PANELS
+═══════════════════════════════════════ */
+.panel{display:none}
+.panel.active{display:block}
+
+/* ═══════════════════════════════════════
+   SEMANA GRID
+═══════════════════════════════════════ */
+.grid-main{
+  position:relative;z-index:1;
+  max-width:1100px;margin:0 auto;
+  padding:24px 16px 60px;
+  display:grid;grid-template-columns:1fr;gap:20px;
+}
+@media(min-width:768px){
+  .grid-main{grid-template-columns:1fr 1fr;padding:32px 24px 60px}
+}
+@media(min-width:1024px){
+  .grid-main{grid-template-columns:360px 1fr}
+}
+
+/* ═══════════════════════════════════════
+   REPORTS WRAPPER
+═══════════════════════════════════════ */
+.reports-wrap{
+  position:relative;z-index:1;
+  max-width:1100px;margin:0 auto;
+  padding:24px 16px 60px;
+  display:flex;flex-direction:column;gap:20px;
+}
+
+/* ═══════════════════════════════════════
+   CARDS
+═══════════════════════════════════════ */
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:22px;
+  animation:fadeUp .4s ease both;
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(14px)}
+  to  {opacity:1;transform:translateY(0)}
+}
+.card:nth-child(1){animation-delay:.05s}
+.card:nth-child(2){animation-delay:.10s}
+.card:nth-child(3){animation-delay:.15s}
+.card:nth-child(4){animation-delay:.20s}
+.card:nth-child(5){animation-delay:.25s}
+.card:nth-child(6){animation-delay:.30s}
+.card-title{
+  font-size:.7rem;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:16px;display:flex;align-items:center;gap:6px;
+}
+.card-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.span-full{grid-column:1/-1}
+
+/* ═══════════════════════════════════════
+   STAT BOXES
+═══════════════════════════════════════ */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 16px;
+}
+.stat-box .label{
+  font-size:.65rem;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+.stat-box .value{font-family:var(--mono);font-size:1.25rem;font-weight:500;line-height:1}
+.stat-box .value.green{color:var(--accent)}
+.stat-box .value.red  {color:var(--accent2)}
+.stat-box .value.gold {color:var(--accent3)}
+
+/* ── DOBLE AHORRO ── */
+.savings-dual{
+  grid-column:1/-1;
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+}
+.stat-box.saving-base{
+  background:rgba(167,139,250,.07);
+  border-color:rgba(167,139,250,.25);
+}
+.stat-box.saving-real{
+  background:rgba(79,255,176,.07);
+  border-color:rgba(79,255,176,.25);
+}
+.stat-box .sub-hint{
+  font-size:.55rem;font-family:var(--mono);color:var(--muted);
+  margin-top:4px;line-height:1.4;
+}
+
+/* ═══════════════════════════════════════
+   SAVINGS HERO
+═══════════════════════════════════════ */
+.savings-hero{
+  background:linear-gradient(135deg,#0f2920 0%,#0d1a14 100%);
+  border:1px solid #1e4035;border-radius:var(--radius);
+  padding:22px;position:relative;overflow:hidden;
+}
+.savings-hero::after{
+  content:'';position:absolute;top:-40px;right:-40px;
+  width:160px;height:160px;
+  background:radial-gradient(circle,rgba(79,255,176,.12) 0%,transparent 70%);
+  pointer-events:none;
+}
+.savings-hero .big-amount{
+  font-family:var(--mono);font-size:2.4rem;font-weight:500;
+  color:var(--accent);line-height:1;margin:10px 0 6px;letter-spacing:-.03em;
+}
+.savings-hero .sub{font-size:.72rem;color:rgba(79,255,176,.55);font-family:var(--mono)}
+
+/* ═══════════════════════════════════════
+   FORMS
+═══════════════════════════════════════ */
+.form-group{margin-bottom:14px}
+label{
+  display:block;font-size:.68rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;
+}
+input,select{
+  width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-family:var(--mono);
+  font-size:.9rem;padding:10px 14px;outline:none;transition:border-color .2s;
+}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+select option{background:var(--card)}
+
+/* ── OTROS FIELD ── */
+#otrosDescWrap{margin-top:-6px;margin-bottom:14px;display:none;}
+#otrosDescWrap input{border-color:rgba(255,199,95,.35)}
+#otrosDescWrap input:focus{border-color:var(--accent3)}
+
+/* ── EXTRA INCOMES ── */
+.extra-income-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.extra-item{
+  background:rgba(79,255,176,.06);border:1px solid rgba(79,255,176,.15);
+  border-radius:8px;padding:8px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:.8rem;animation:fadeUp .2s ease both;
+}
+.extra-item .ei-desc{color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.extra-item .ei-amt {font-family:var(--mono);color:var(--accent);font-size:.85rem;white-space:nowrap}
+
+/* ═══════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  font-family:var(--sans);font-size:.82rem;font-weight:700;
+  letter-spacing:.04em;padding:11px 20px;
+  border-radius:8px;border:none;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#0d1a14}
+.btn-primary:hover{box-shadow:0 0 20px rgba(79,255,176,.35)}
+.btn-danger {background:rgba(255,107,107,.12);color:var(--accent2);border:1px solid rgba(255,107,107,.25)}
+.btn-danger:hover {background:rgba(255,107,107,.2)}
+.btn-gold   {background:rgba(255,199,95,.12);color:var(--accent3);border:1px solid rgba(255,199,95,.25)}
+.btn-gold:hover   {background:rgba(255,199,95,.2)}
+.btn-purple {background:rgba(167,139,250,.12);color:var(--accent4);border:1px solid rgba(167,139,250,.25)}
+.btn-purple:hover {background:rgba(167,139,250,.2)}
+.btn-full{width:100%}
+.btn-sm{padding:7px 13px;font-size:.75rem}
+.btn-reset{
+  background:rgba(255,107,107,.15);
+  color:var(--accent2);
+  border:1px solid rgba(255,107,107,.35);
+}
+.btn-reset:hover{background:rgba(255,107,107,.28);box-shadow:0 0 16px rgba(255,107,107,.2)}
+
+/* ═══════════════════════════════════════
+   EXPENSE LIST
+═══════════════════════════════════════ */
+.expense-list{
+  display:flex;flex-direction:column;gap:8px;
+  max-height:340px;overflow-y:auto;padding-right:4px;
+}
+.expense-list::-webkit-scrollbar{width:4px}
+.expense-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.expense-item{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:12px 14px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;animation:fadeUp .25s ease both;
+}
+.expense-item .info{flex:1;min-width:0}
+.expense-item .desc{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expense-item .cat {font-size:.65rem;font-family:var(--mono);color:var(--muted);margin-top:2px}
+.expense-item .amount{font-family:var(--mono);font-size:.92rem;color:var(--accent2);font-weight:500;white-space:nowrap}
+.delete-btn{
+  background:none;border:none;color:var(--muted);
+  cursor:pointer;font-size:1rem;padding:2px 4px;border-radius:4px;
+  transition:color .15s;line-height:1;
+}
+.delete-btn:hover{color:var(--accent2)}
+.empty-state{text-align:center;padding:32px 0;color:var(--muted);font-size:.82rem;font-family:var(--mono)}
+
+/* ═══════════════════════════════════════
+   PROGRESS
+═══════════════════════════════════════ */
+.progress-wrap{margin-top:14px}
+.progress-label{display:flex;justify-content:space-between;font-size:.65rem;font-family:var(--mono);color:var(--muted);margin-bottom:6px}
+.progress-bar{height:6px;background:var(--border);border-radius:10px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:10px;transition:width .5s cubic-bezier(.23,1,.32,1)}
+.progress-fill.danger{background:var(--accent2)}
+
+/* ═══════════════════════════════════════
+   CHART WRAPPERS
+═══════════════════════════════════════ */
+.chart-wrap{
+  position:relative;max-height:280px;
+  display:flex;align-items:center;justify-content:center;
+}
+.chart-wrap canvas{max-height:260px!important}
+.chart-wrap-bar{position:relative;height:300px}
+.chart-wrap-bar canvas{width:100%!important;height:100%!important}
+
+/* ═══════════════════════════════════════
+   DIVIDER / INLINE ROW
+═══════════════════════════════════════ */
+.hdivider{border:none;border-top:1px solid var(--border);margin:16px 0}
+.inline-row{display:flex;gap:8px}
+.inline-row input{flex:1}
+.close-week-bar{
+  grid-column:1/-1;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+.week-info{font-size:.8rem;color:var(--muted);font-family:var(--mono)}
+
+/* ═══════════════════════════════════════
+   MODAL
+═══════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:28px;width:100%;max-width:460px;
+  transform:translateY(20px);transition:transform .2s;
+}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal h2{font-size:1.1rem;font-weight:800;margin-bottom:8px}
+.modal p {font-size:.85rem;color:var(--muted);margin-bottom:20px;line-height:1.65}
+.modal .hl{color:var(--accent);font-family:var(--mono);font-weight:500}
+.modal .hl2{color:var(--accent2);font-family:var(--mono);font-weight:500}
+.modal .hl3{color:var(--accent3);font-family:var(--mono);font-weight:500}
+.modal-actions{display:flex;gap:10px}
+.modal-actions .btn{flex:1}
+
+/* ═══════════════════════════════════════
+   REPORTS
+═══════════════════════════════════════ */
+.report-period-tabs{display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.period-btn{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;color:var(--muted);cursor:pointer;
+  font-family:var(--sans);font-size:.78rem;font-weight:700;
+  letter-spacing:.05em;padding:8px 18px;transition:all .2s;
+}
+.period-btn.active{background:rgba(79,255,176,.1);border-color:rgba(79,255,176,.3);color:var(--accent)}
+
+/* week history grid */
+.history-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:600px){.history-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:900px){.history-grid{grid-template-columns:1fr 1fr 1fr}}
+.week-hist-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:16px;
+  position:relative;overflow:hidden;
+}
+.week-hist-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:3px;background:var(--accent);border-radius:3px 0 0 3px;
+}
+.whc-num {font-family:var(--mono);font-size:.65rem;color:var(--muted);margin-bottom:4px}
+.whc-date{font-size:.72rem;color:var(--muted);font-family:var(--mono);margin-bottom:10px}
+.whc-row {display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.whc-label{font-size:.68rem;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.whc-val  {font-family:var(--mono);font-size:.85rem}
+.whc-val.green{color:var(--accent)}
+.whc-val.red  {color:var(--accent2)}
+.whc-val.gold {color:var(--accent3)}
+
+/* summary strip */
+.summary-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:0}
+.ss-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.ss-box .ss-label{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.ss-box .ss-val  {font-family:var(--mono);font-size:1.15rem;line-height:1}
+.ss-box .ss-val.green{color:var(--accent)}
+.ss-box .ss-val.red  {color:var(--accent2)}
+.ss-box .ss-val.gold {color:var(--accent3)}
+
+/* detail table */
+.detail-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.detail-row:last-child{border-bottom:none}
+.detail-row .dr-label{font-weight:700;font-size:.88rem}
+.detail-row .dr-nums {display:flex;gap:18px;font-family:var(--mono);font-size:.82rem;flex-wrap:wrap}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--accent);color:#0d1a14;
+  font-family:var(--sans);font-size:.82rem;font-weight:700;
+  padding:10px 22px;border-radius:30px;
+  z-index:300;transition:transform .3s cubic-bezier(.23,1,.32,1);
+  white-space:nowrap;pointer-events:none;
+}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── REPORT PANEL TOGGLE ── */
+.rep-panel{display:none}
+.rep-panel.active-panel{display:flex;flex-direction:column;gap:20px}
+
+/* ── BANNER MODO EDICIÓN HISTÓRICA ── */
+.edit-history-banner{
+  display:none;
+  position:sticky;top:57px;z-index:90;
+  background:linear-gradient(90deg,rgba(255,199,95,.18) 0%,rgba(255,199,95,.08) 100%);
+  border-bottom:2px solid rgba(255,199,95,.45);
+  padding:10px 24px;
+  align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  animation:fadeUp .3s ease both;
+}
+.edit-history-banner.active{display:flex}
+.ehb-left{display:flex;align-items:center;gap:10px}
+.ehb-icon{
+  width:32px;height:32px;border-radius:8px;
+  background:rgba(255,199,95,.2);border:1px solid rgba(255,199,95,.4);
+  display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;
+}
+.ehb-title{font-weight:800;font-size:.88rem;color:var(--accent3);letter-spacing:-.01em}
+.ehb-sub  {font-size:.68rem;color:rgba(255,199,95,.65);font-family:var(--mono)}
+.ehb-actions{display:flex;gap:8px;flex-shrink:0}
+.btn-cancel-edit{
+  background:rgba(255,255,255,.06);color:var(--muted);
+  border:1px solid var(--border);font-size:.78rem;padding:7px 14px;
+}
+.btn-cancel-edit:hover{color:var(--text);background:rgba(255,255,255,.1)}
+
+/* ═══════════════════════════════════════
+   DANGER ZONE
+═══════════════════════════════════════ */
+.danger-zone{
+  border:1px solid rgba(255,107,107,.25);
+  border-radius:var(--radius);
+  padding:20px 22px;
+  background:rgba(255,107,107,.04);
+  position:relative;
+  overflow:hidden;
+}
+.danger-zone::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,107,107,.06) 0%,transparent 60%);
+  pointer-events:none;
+}
+.danger-zone-header{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.danger-zone-icon{
+  width:30px;height:30px;border-radius:7px;
+  background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.9rem;flex-shrink:0;
+}
+.danger-zone-title{
+  font-size:.68rem;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent2);
+}
+.danger-zone-desc{
+  font-size:.78rem;color:var(--muted);font-family:var(--mono);
+  line-height:1.6;margin-bottom:16px;
+}
+.btn-hard-reset{
+  background:rgba(255,107,107,.1);
+  color:var(--accent2);
+  border:1px solid rgba(255,107,107,.35);
+  font-size:.82rem;
+  transition:all .2s;
+}
+.btn-hard-reset:hover{
+  background:rgba(255,107,107,.22);
+  border-color:rgba(255,107,107,.6);
+  box-shadow:0 0 18px rgba(255,107,107,.2);
+}
+
+/* ── MODAL HARD RESET ── */
+#modalHardReset .modal{
+  border-color:rgba(255,107,107,.35);
+  background:linear-gradient(160deg,#1e1318 0%,var(--card) 50%);
+}
+#modalHardReset .modal h2{color:var(--accent2)}
+.hard-reset-confirm-input{
+  width:100%;background:var(--surface);
+  border:1px solid rgba(255,107,107,.35);
+  border-radius:8px;color:var(--text);
+  font-family:var(--mono);font-size:1rem;
+  padding:12px 14px;outline:none;
+  transition:border-color .2s;
+  margin-bottom:14px;
+  letter-spacing:.08em;
+}
+.hard-reset-confirm-input:focus{border-color:var(--accent2)}
+.hard-reset-confirm-input::placeholder{color:var(--muted);letter-spacing:0}
+.hard-reset-confirm-input.valid{
+  border-color:var(--accent2);
+  background:rgba(255,107,107,.06);
+}
+
+/* ── BOTÓN EDITAR en tarjeta histórica ── */
+.whc-edit-btn{
+  margin-top:12px;width:100%;
+  background:rgba(167,139,250,.1);color:var(--accent4);
+  border:1px solid rgba(167,139,250,.25);
+  font-size:.72rem;padding:7px 10px;border-radius:7px;
+  font-family:var(--sans);font-weight:700;letter-spacing:.04em;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.whc-edit-btn:hover{background:rgba(167,139,250,.22);box-shadow:0 0 12px rgba(167,139,250,.15)}
+.whc-edit-btn:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     HEADER
+═══════════════════════════════════════ -->
+<header>
+  <div class="header-left">
+    <div class="header-logo-icon">IS</div>
+    <span class="brand-name">ISAVE<span>PC</span></span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('week')">Semana Actual</button>
+    <button class="tab-btn"        onclick="switchTab('reports')">Reportes</button>
+  </div>
+
+  <!-- ── WEEK SELECTOR ── -->
+  <div class="week-selector" id="weekSelectorWrap">
+    <button class="week-selector-btn" id="weekSelectorBtn" onclick="toggleWeekDropdown(event)">
+      <span id="weekBadgeLabel">Semana 1</span>
+      <span class="wsb-chevron">▾</span>
+    </button>
+    <div class="week-dropdown" id="weekDropdown">
+      <div class="wdd-header">Navegar semanas</div>
+      <div class="wdd-scroll" id="weekDropdownList"></div>
+    </div>
+  </div>
+</header>
+
+
+<!-- ═══════════════════════════════════════
+     BANNER: MODO EDICIÓN HISTÓRICA
+═══════════════════════════════════════ -->
+<div class="edit-history-banner" id="editHistoryBanner">
+  <div class="ehb-left">
+    <div class="ehb-icon">✏️</div>
+    <div>
+      <div class="ehb-title" id="ehbTitle">Modificando Semana X (Histórica)</div>
+      <div class="ehb-sub">Los cambios sobrescribirán el registro del historial — el número de semana no avanzará</div>
+    </div>
+  </div>
+  <div class="ehb-actions">
+    <button class="btn btn-cancel-edit" onclick="cancelHistoricalEdit()">✕ Cancelar edición</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     PANEL: SEMANA ACTUAL
+═══════════════════════════════════════ -->
+<div id="panelWeek" class="panel active">
+<div class="grid-main">
+
+  <!-- ── PRESUPUESTO + EXTRA ── -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>Presupuesto Semanal</div>
+    <div class="form-group">
+      <label>Ingreso base de la semana ($)</label>
+      <input type="number" id="incomeInput" placeholder="0.00" min="0" step="0.01"/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveIncome()" style="margin-bottom:16px">
+      💾 Guardar Presupuesto Base
+    </button>
+    <hr class="hdivider"/>
+    <div class="card-title" style="margin-bottom:10px">
+      <span class="dot" style="background:var(--accent4)"></span>Ingreso Extra
+    </div>
+    <div class="form-group">
+      <label>Monto extra ($)</label>
+      <input type="number" id="extraAmtInput" placeholder="0.00" min="0" step="0.01"/>
+    </div>
+    <div class="form-group">
+      <label>Descripción (opcional)</label>
+      <input type="text" id="extraDescInput" placeholder="Ej. Venta de producto"/>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="addExtraIncome()">
+      + Agregar Ingreso Extra
+    </button>
+    <div class="extra-income-list" id="extraIncomeList"></div>
+    <div class="progress-wrap" id="progressWrap" style="display:none">
+      <div class="progress-label">
+        <span>Gastado del total</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>Resumen de la Semana</div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="label">Presupuesto Total</div>
+        <div class="value green" id="statIncome">$0.00</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Gastos</div>
+        <div class="value red" id="statExpenses">$0.00</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Saldo Actual</div>
+        <div class="value" id="statBalance">$0.00</div>
+      </div>
+      <div class="stat-box" style="visibility:hidden;pointer-events:none;opacity:0"></div>
+    </div>
+    <div class="savings-dual" style="margin-top:12px">
+      <div class="stat-box saving-base">
+        <div class="label">Meta Inicial 35%</div>
+        <div class="value" style="color:var(--accent4)" id="statSavingBase">$0.00</div>
+        <div class="sub-hint">35% del ingreso base<br>sin contar extras ni gastos</div>
+      </div>
+      <div class="stat-box saving-real">
+        <div class="label">Ahorro Actual 35%</div>
+        <div class="value gold" id="statSaving">$0.00</div>
+        <div class="sub-hint">35% del saldo real<br>(base + extras − gastos)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── AHORRO ACUMULADO ── -->
+  <div class="savings-hero card span-full">
+    <div class="card-title"><span class="dot"></span>Ahorro Total Acumulado</div>
+    <div class="big-amount" id="totalSavings">$0.00</div>
+    <div class="sub">Bóveda ISAVEPC · nunca se borra al cerrar semana</div>
+    <div style="margin-top:18px">
+      <label>Retirar del ahorro ($)</label>
+      <div class="inline-row">
+        <input type="number" id="withdrawInput" placeholder="0.00" min="0" step="0.01"/>
+        <button class="btn btn-danger" onclick="withdrawSavings()">Retirar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REGISTRAR GASTO ── -->
+  <div class="card">
+    <div class="card-title">
+      <span class="dot" style="background:var(--accent2)"></span>Registrar Gasto
+    </div>
+    <div class="form-group">
+      <label>Monto ($)</label>
+      <input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01"/>
+    </div>
+    <div class="form-group">
+      <label>Descripción / Concepto</label>
+      <input type="text" id="expDesc" placeholder="Ej. Cena en restaurante"/>
+    </div>
+    <div class="form-group">
+      <label>Categoría</label>
+      <select id="expCat" onchange="onCatChange()">
+        <option value="Gasolina">⛽ Gasolina</option>
+        <option value="Comida">🍔 Comida</option>
+        <option value="Ocio">🎮 Ocio</option>
+        <option value="Servicios">💡 Servicios</option>
+        <option value="Salud">💊 Salud</option>
+        <option value="Educación">📚 Educación</option>
+        <option value="Ropa">👕 Ropa</option>
+        <option value="Transporte">🚌 Transporte</option>
+        <option value="Novia">💑 Novia</option>
+        <option value="Amigos">🍻 Amigos</option>
+        <option value="Otros">📦 Otros</option>
+      </select>
+    </div>
+    <div id="otrosDescWrap">
+      <label>Especifica qué son "Otros"</label>
+      <input type="text" id="otrosDesc" placeholder='Ej. Tóner genérico → se guardará como "Otros - Tóner genérico"'/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="addExpense()">+ Agregar Gasto</button>
+  </div>
+
+  <!-- ── HISTORIAL GASTOS ── -->
+  <div class="card">
+    <div class="card-title">
+      <span class="dot" style="background:var(--accent2)"></span>Historial de Gastos
+    </div>
+    <div class="expense-list" id="expenseList">
+      <div class="empty-state">Sin gastos registrados esta semana</div>
+    </div>
+  </div>
+
+  <!-- ── GRÁFICA CATEGORÍAS ── -->
+  <div class="card span-full">
+    <div class="card-title">
+      <span class="dot" style="background:var(--accent3)"></span>Gastos por Categoría
+    </div>
+    <div class="chart-wrap">
+      <canvas id="categoryChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ── CERRAR SEMANA / GUARDAR CAMBIOS ── -->
+  <div class="close-week-bar span-full">
+    <div class="week-info" id="weekInfo">Semana 1 activa · datos guardados automáticamente</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-reset" id="btnResetWeek" onclick="resetCurrentWeek()">
+        🔄 Reiniciar Semana
+      </button>
+      <button class="btn btn-gold" id="btnCloseOrSave" onclick="onCloseOrSaveClick()">
+        🔒 Cerrar Semana
+      </button>
+    </div>
+  </div>
+
+</div>
+</div><!-- /panelWeek -->
+
+
+<!-- ═══════════════════════════════════════
+     PANEL: REPORTES
+═══════════════════════════════════════ -->
+<div id="panelReports" class="panel">
+<div class="reports-wrap">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+    <div>
+      <h2 style="font-size:1.3rem;font-weight:800;margin-bottom:4px">Historial &amp; Reportes</h2>
+      <p style="font-size:.8rem;color:var(--muted);font-family:var(--mono)">Análisis de semanas, meses y año — ISAVEPC</p>
+    </div>
+    <div class="report-period-tabs">
+      <button class="period-btn active" onclick="switchPeriod(event,'weekly')">Semanas</button>
+      <button class="period-btn"        onclick="switchPeriod(event,'monthly')">Mensual</button>
+      <button class="period-btn"        onclick="switchPeriod(event,'annual')">Anual</button>
+    </div>
+  </div>
+  <div id="repWeekly" class="rep-panel active-panel">
+    <div class="summary-strip" id="weeklySummary"></div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Semanas Cerradas</div>
+      <div class="history-grid" id="historyGrid">
+        <div class="empty-state" style="grid-column:1/-1">Sin semanas cerradas aún</div>
+      </div>
+    </div>
+  </div>
+  <div id="repMonthly" class="rep-panel">
+    <div class="summary-strip" id="monthlySummary"></div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent3)"></span>Comparativo Mensual</div>
+      <div class="chart-wrap-bar"><canvas id="monthlyChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent3)"></span>Detalle por Mes</div>
+      <div id="monthlyDetail"></div>
+    </div>
+  </div>
+  <div id="repAnnual" class="rep-panel">
+    <div class="summary-strip" id="annualSummary"></div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent4)"></span>Comparativo Anual</div>
+      <div class="chart-wrap-bar"><canvas id="annualChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent4)"></span>Detalle por Año</div>
+      <div id="annualDetail"></div>
+    </div>
+  </div>
+  <!-- ── DANGER ZONE ── -->
+  <div class="danger-zone">
+    <div class="danger-zone-header">
+      <div class="danger-zone-icon">⚠️</div>
+      <div class="danger-zone-title">Zona de Peligro · Administración</div>
+    </div>
+    <div class="danger-zone-desc">
+      Esta acción borrará <strong style="color:var(--accent2)">absolutamente todos los datos</strong>
+      de ISAVEPC: semanas, historial, ahorros, gastos e ingresos.<br/>
+      La aplicación regresará a su estado de fábrica. <strong style="color:var(--accent2)">No hay forma de deshacer esto.</strong>
+    </div>
+    <button class="btn btn-hard-reset btn-sm" onclick="openHardReset()">
+      🗑 Borrar Todos los Datos
+    </button>
+  </div>
+
+</div>
+</div><!-- /panelReports -->
+
+
+<!-- ═══════════════════════════════════════
+     MODAL: CERRAR SEMANA
+═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modalCloseWeek">
+  <div class="modal">
+    <h2>🗓 Cerrar Semana <span id="mWeekNum" style="color:var(--accent)"></span></h2>
+    <p>
+      Ingresos totales: <span class="hl"  id="mTotalInc">$0.00</span><br/>
+      Total gastado:    <span class="hl2" id="mTotalExp">$0.00</span><br/>
+      Sobrante:         <span class="hl"  id="mBalance">$0.00</span><br/><br/>
+      Ahorro proyectado (35% del sobrante): <span class="hl3" id="mSaving">$0.00</span><br/><br/>
+      <strong>¿Transferir el ahorro proyectado a tu bóveda ISAVEPC?</strong>
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeWeek(true)">✅ Sí, transferir</button>
+      <button class="btn btn-danger"  onclick="closeWeek(false)">❌ No, descartar</button>
+    </div>
+    <hr class="hdivider"/>
+    <p style="font-size:.72rem;color:var(--muted);margin-bottom:12px">
+      Los datos quedarán guardados en el historial permanente.
+    </p>
+    <button class="btn btn-full" style="background:var(--border);color:var(--muted)"
+            onclick="closeModal('modalCloseWeek')">Cancelar</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MODAL: REINICIAR SEMANA
+═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modalResetWeek">
+  <div class="modal">
+    <h2>🔄 Reiniciar Semana <span id="mResetWeekNum" style="color:var(--accent2)"></span></h2>
+    <p>
+      Se borrarán <strong>todos los gastos</strong>, los <strong>ingresos extra</strong>
+      y el <strong>presupuesto base</strong> de la semana en pantalla.<br/><br/>
+      El número de semana <span class="hl">no avanzará</span> y
+      <span class="hl2">no se guardará nada</span> en el historial.<br/><br/>
+      <strong>¿Confirmas que quieres empezar desde cero?</strong>
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" onclick="confirmResetWeek()">🔄 Sí, reiniciar</button>
+      <button class="btn" style="background:var(--border);color:var(--muted)"
+              onclick="closeModal('modalResetWeek')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MODAL: HARD RESET
+═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modalHardReset">
+  <div class="modal">
+    <h2>🗑 Reinicio Total de Base de Datos</h2>
+    <p>
+      Estás a punto de <strong style="color:var(--accent2)">borrar permanentemente</strong>
+      todos los datos de ISAVEPC:<br/><br/>
+      · Semana actual (ingresos, gastos, extras)<br/>
+      · Historial completo de semanas cerradas<br/>
+      · Ahorro acumulado en tu bóveda<br/><br/>
+      La aplicación se reiniciará desde <span class="hl">Semana 1 — $0.00</span>.
+      <strong>Esta acción no se puede deshacer.</strong><br/><br/>
+      Para confirmar, escribe la palabra <span class="hl2">BORRAR</span> aquí abajo:
+    </p>
+    <input
+      type="text"
+      id="hardResetInput"
+      class="hard-reset-confirm-input"
+      placeholder='Escribe "BORRAR" para confirmar'
+      oninput="onHardResetInput()"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="btnConfirmHardReset" onclick="confirmHardReset()" disabled
+              style="opacity:.4;cursor:not-allowed">
+        🗑 Borrar Todo
+      </button>
+      <button class="btn" style="background:var(--border);color:var(--muted)"
+              onclick="closeModal('modalHardReset')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+
+<!-- ═══════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════ -->
+<script>
+/* ════════════════════════════════════════
+   STORAGE
+════════════════════════════════════════ */
+const LS_KEY = 'isavepc_v1';
+
+function defaultState() {
+  return {
+    week:         1,
+    income:       0,
+    extraIncomes: [],
+    expenses:     [],
+    savings:      0,
+    history:      []
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return Object.assign(defaultState(), JSON.parse(raw));
+    return migrateOld();
+  } catch(e) { return defaultState(); }
+}
+
+function migrateOld() {
+  const s = defaultState();
+  try {
+    const v2raw = localStorage.getItem('fp_v2_data');
+    if (v2raw) {
+      const v2 = JSON.parse(v2raw);
+      s.week=v2.week||1; s.income=v2.income||0;
+      s.extraIncomes=v2.extraIncomes||[]; s.expenses=v2.expenses||[];
+      s.savings=v2.savings||0; s.history=v2.history||[];
+      localStorage.removeItem('fp_v2_data');
+    }
+  } catch(e){}
+  try {
+    const oi=parseFloat(localStorage.getItem('fp_income'))||0;
+    const oe=JSON.parse(localStorage.getItem('fp_expenses')||'[]');
+    const os=parseFloat(localStorage.getItem('fp_savings'))||0;
+    const ow=parseInt(localStorage.getItem('fp_week'))||1;
+    if(oi||oe.length||os){
+      s.income=s.income||oi; s.expenses=s.expenses.length?s.expenses:oe;
+      s.savings=s.savings||os; s.week=s.week||ow;
+      ['fp_income','fp_expenses','fp_savings','fp_week'].forEach(k=>localStorage.removeItem(k));
+    }
+  } catch(e){}
+  persist(s);
+  return s;
+}
+
+let state = loadState();
+function persist(s){ localStorage.setItem(LS_KEY, JSON.stringify(s||state)); }
+function save(){ persist(state); }
+
+/* ════════════════════════════════════════
+   MODO EDICIÓN HISTÓRICA
+   ─────────────────────────────────────
+   editMode guarda el estado de si estamos
+   editando una semana pasada:
+   · active      — ¿modo activo?
+   · historyIdx  — índice real en state.history
+   · weekNum     — número de semana (display)
+   · savedAmount — ahorro previo (para diff bóveda)
+   · prevState   — snapshot de la semana actual
+                   para restaurarla al salir
+════════════════════════════════════════ */
+let editMode = {
+  active:      false,
+  historyIdx:  -1,
+  weekNum:     0,
+  savedAmount: 0,
+  prevState:   null
+};
+
+/* ════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════ */
+const fmt = n => '$'+(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const fmtDate = iso => {
+  if(!iso) return '—';
+  const d=new Date(iso);
+  return `${d.getDate()} ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`;
+};
+const totalInc = () => state.income + state.extraIncomes.reduce((s,e)=>s+e.amount,0);
+const totalExp = () => state.expenses.reduce((s,e)=>s+e.amount,0);
+const balance  = () => totalInc() - totalExp();
+const projSav  = () => Math.max(0, balance() * 0.35);
+const baseSav  = () => Math.max(0, state.income * 0.35);
+
+function toast(msg, dur=2400) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), dur);
+}
+
+/* ════════════════════════════════════════
+   WEEK DROPDOWN — SELECTOR DE SEMANAS
+   ─────────────────────────────────────
+   Construye y muestra el menú flotante que
+   lista la semana actual + todas las históricas.
+   Seleccionar una llama a selectWeekFromDropdown().
+════════════════════════════════════════ */
+let dropdownOpen = false;
+
+function toggleWeekDropdown(e) {
+  e.stopPropagation();
+  dropdownOpen ? closeWeekDropdown() : openWeekDropdown();
+}
+
+function openWeekDropdown() {
+  buildWeekDropdownList();
+  document.getElementById('weekDropdown').classList.add('open');
+  document.getElementById('weekSelectorBtn').classList.add('open');
+  dropdownOpen = true;
+}
+
+function closeWeekDropdown() {
+  document.getElementById('weekDropdown').classList.remove('open');
+  document.getElementById('weekSelectorBtn').classList.remove('open');
+  dropdownOpen = false;
+}
+
+/* Reconstruye el contenido del menú cada vez que se abre */
+function buildWeekDropdownList() {
+  const list = document.getElementById('weekDropdownList');
+  const h    = state.history;
+
+  /* ── Opción: Semana Actual ── */
+  const isActual = !editMode.active;
+  list.innerHTML = `
+    <button class="wdd-item ${isActual ? 'current' : ''}"
+            onclick="selectWeekFromDropdown('current')">
+      <span class="wdd-item-dot" style="background:var(--accent)"></span>
+      <span class="wdd-item-info">
+        <span class="wdd-item-label">Semana ${state.week} — Actual</span>
+        <span class="wdd-item-sub">En curso · datos sin cerrar</span>
+      </span>
+      ${isActual ? '<span style="font-size:.6rem;color:var(--accent)">●</span>' : ''}
+    </button>`;
+
+  if (!h.length) {
+    list.innerHTML += `<div class="wdd-item" style="cursor:default;opacity:.45;pointer-events:none">
+      <span class="wdd-item-dot" style="background:var(--muted)"></span>
+      <span class="wdd-item-info">
+        <span class="wdd-item-label">Sin semanas cerradas</span>
+        <span class="wdd-item-sub">Cierra tu primera semana para verlas aquí</span>
+      </span>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML += `<div class="wdd-divider"></div>`;
+
+  /* ── Semanas históricas (más reciente primero) ── */
+  [...h].reverse().forEach((w, ri) => {
+    const realIdx   = h.length - 1 - ri;
+    const isEditing = editMode.active && editMode.historyIdx === realIdx;
+    const expStr    = w.expenses > 0 ? `Gas: ${fmt(w.expenses)}` : 'Sin gastos';
+    const editedMark = w.editedAt ? ' ✏️' : '';
+
+    list.innerHTML += `
+      <button class="wdd-item ${isEditing ? 'selected-hist' : ''}"
+              onclick="selectWeekFromDropdown(${realIdx})">
+        <span class="wdd-item-dot" style="background:var(--accent3)"></span>
+        <span class="wdd-item-info">
+          <span class="wdd-item-label">Semana ${w.weekNum}${editedMark}</span>
+          <span class="wdd-item-sub">${fmtDate(w.closedAt)} · ${expStr}</span>
+        </span>
+        ${isEditing ? '<span style="font-size:.6rem;color:var(--accent3)">●</span>' : ''}
+      </button>`;
+  });
+}
+
+/* ─────────────────────────────────────────
+   Lógica al seleccionar una opción del menú:
+   · 'current'  → volver a la semana actual
+   · número     → cargar esa semana histórica
+──────────────────────────────────────── */
+function selectWeekFromDropdown(idx) {
+  closeWeekDropdown();
+
+  if (idx === 'current') {
+    /* ── Si ya estamos en modo normal, no hacer nada ── */
+    if (!editMode.active) return;
+    /* ── Si estábamos editando, cancelar sin guardar ── */
+    cancelHistoricalEdit();
+    return;
+  }
+
+  /* ── Seleccionamos una semana histórica ── */
+  const entry = state.history[idx];
+  if (!entry) return;
+
+  /* Si ya estábamos editando OTRA semana, cancelar primero */
+  if (editMode.active && editMode.historyIdx !== idx) {
+    /* Restaurar semana actual antes de cargar la nueva */
+    state.income       = editMode.prevState.income;
+    state.extraIncomes = [...editMode.prevState.extraIncomes];
+    state.expenses     = [...editMode.prevState.expenses];
+    editMode = { active:false, historyIdx:-1, weekNum:0, savedAmount:0, prevState:null };
+  }
+
+  /* Si ya estamos editando ESTA misma semana, no hacer nada */
+  if (editMode.active && editMode.historyIdx === idx) return;
+
+  /* ── Iniciar edición de la semana seleccionada ── */
+  startHistoricalEdit(idx);
+}
+
+/* ════════════════════════════════════════
+   TAB NAVIGATION
+════════════════════════════════════════ */
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active', (tab==='week'&&i===0)||(tab==='reports'&&i===1));
+  });
+  document.getElementById('panelWeek').classList.toggle('active',    tab==='week');
+  document.getElementById('panelReports').classList.toggle('active', tab==='reports');
+  if (tab==='reports') renderReports();
+}
+
+/* ════════════════════════════════════════
+   CATEGORY TOGGLE (OTROS)
+════════════════════════════════════════ */
+function onCatChange() {
+  const cat = document.getElementById('expCat').value;
+  document.getElementById('otrosDescWrap').style.display = cat==='Otros' ? 'block' : 'none';
+}
+
+/* ════════════════════════════════════════
+   INCOME
+════════════════════════════════════════ */
+function saveIncome() {
+  const val = parseFloat(document.getElementById('incomeInput').value);
+  if (isNaN(val)||val<0) { toast('⚠️ Ingresa un monto válido'); return; }
+  state.income = val;
+  save(); render();
+  toast('✅ Presupuesto base guardado');
+}
+
+function addExtraIncome() {
+  const amt  = parseFloat(document.getElementById('extraAmtInput').value);
+  const desc = document.getElementById('extraDescInput').value.trim() || 'Ingreso extra';
+  if (isNaN(amt)||amt<=0) { toast('⚠️ Ingresa un monto válido'); return; }
+  state.extraIncomes.push({ id:Date.now(), amount:amt, desc });
+  save(); render();
+  document.getElementById('extraAmtInput').value  = '';
+  document.getElementById('extraDescInput').value = '';
+  toast('✅ Ingreso extra sumado: '+fmt(amt));
+}
+
+function deleteExtraIncome(id) {
+  state.extraIncomes = state.extraIncomes.filter(e=>e.id!==id);
+  save(); render();
+  toast('🗑 Ingreso extra eliminado');
+}
+
+/* ════════════════════════════════════════
+   EXPENSES
+════════════════════════════════════════ */
+function addExpense() {
+  const amount = parseFloat(document.getElementById('expAmount').value);
+  const desc   = document.getElementById('expDesc').value.trim();
+  let   cat    = document.getElementById('expCat').value;
+  if (isNaN(amount)||amount<=0) { toast('⚠️ Ingresa un monto válido'); return; }
+  if (!desc)                    { toast('⚠️ Agrega una descripción'); return; }
+  if (cat === 'Otros') {
+    const otrosExtra = document.getElementById('otrosDesc').value.trim();
+    if (otrosExtra) cat = 'Otros - ' + otrosExtra;
+    document.getElementById('otrosDesc').value = '';
+    document.getElementById('otrosDescWrap').style.display = 'none';
+    document.getElementById('expCat').value = 'Gasolina';
+  }
+  state.expenses.push({ id:Date.now(), amount, desc, cat });
+  save(); render();
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expDesc').value   = '';
+  toast('✅ Gasto registrado');
+}
+
+function deleteExpense(id) {
+  state.expenses = state.expenses.filter(e=>e.id!==id);
+  save(); render();
+  toast('🗑 Gasto eliminado');
+}
+
+/* ════════════════════════════════════════
+   SAVINGS WITHDRAWAL
+════════════════════════════════════════ */
+function withdrawSavings() {
+  const val = parseFloat(document.getElementById('withdrawInput').value);
+  if (isNaN(val)||val<=0)  { toast('⚠️ Ingresa un monto válido'); return; }
+  if (val>state.savings)   { toast('⚠️ Fondos insuficientes'); return; }
+  state.savings -= val;
+  save(); render();
+  document.getElementById('withdrawInput').value = '';
+  toast('💸 Retiro registrado: '+fmt(val));
+}
+
+/* ════════════════════════════════════════
+   REINICIAR SEMANA
+════════════════════════════════════════ */
+function resetCurrentWeek() {
+  const label = editMode.active ? `#${editMode.weekNum} (Histórica)` : `#${state.week}`;
+  document.getElementById('mResetWeekNum').textContent = label;
+  document.getElementById('modalResetWeek').classList.add('open');
+}
+
+function confirmResetWeek() {
+  state.income       = 0;
+  state.extraIncomes = [];
+  state.expenses     = [];
+  closeModal('modalResetWeek');
+  document.getElementById('incomeInput').value = '';
+  save(); render();
+  toast('🔄 Semana reiniciada — empieza a llenarla de nuevo');
+}
+
+/* ════════════════════════════════════════
+   CERRAR SEMANA
+════════════════════════════════════════ */
+function openCloseWeekModal() {
+  const ti=totalInc(), te=totalExp(), bal=balance(), ps=projSav();
+  document.getElementById('mWeekNum').textContent  = '#'+state.week;
+  document.getElementById('mTotalInc').textContent = fmt(ti);
+  document.getElementById('mTotalExp').textContent = fmt(te);
+  document.getElementById('mBalance').textContent  = fmt(bal);
+  document.getElementById('mSaving').textContent   = fmt(ps);
+  document.getElementById('modalCloseWeek').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function onCloseOrSaveClick() {
+  if (editMode.active) saveHistoricalEdit();
+  else                 openCloseWeekModal();
+}
+
+function closeWeek(transfer) {
+  const ti=totalInc(), te=totalExp(), bal=balance(), ps=projSav();
+  state.history.push({
+    weekNum:          state.week,
+    closedAt:         new Date().toISOString(),
+    baseIncome:       state.income,
+    income:           ti,
+    expenses:         te,
+    balance:          bal,
+    savedAmount:      transfer ? ps : 0,
+    expenseItems:     [...state.expenses],
+    extraIncomeItems: [...state.extraIncomes]
+  });
+  if (transfer) { state.savings += ps; toast('🎉 Ahorro transferido: '+fmt(ps)); }
+  state.income=0; state.extraIncomes=[]; state.expenses=[]; state.week+=1;
+  save();
+  closeModal('modalCloseWeek');
+  render();
+  document.getElementById('incomeInput').value = '';
+  if (!transfer) toast('🔄 Semana cerrada y guardada en historial');
+}
+
+/* ════════════════════════════════════════
+   EDICIÓN HISTÓRICA — INICIAR
+   ─────────────────────────────────────
+   1. Guarda snapshot de la semana actual
+   2. Carga los datos de la semana histórica
+   3. Activa el banner + cambia botón principal
+════════════════════════════════════════ */
+function startHistoricalEdit(historyIdx) {
+  const entry = state.history[historyIdx];
+  if (!entry) return;
+
+  /* Guardar snapshot de la semana en curso */
+  editMode.prevState = {
+    income:       state.income,
+    extraIncomes: [...state.extraIncomes],
+    expenses:     [...state.expenses]
+  };
+
+  editMode.active      = true;
+  editMode.historyIdx  = historyIdx;
+  editMode.weekNum     = entry.weekNum;
+  editMode.savedAmount = entry.savedAmount;
+
+  /* Cargar datos históricos en el panel */
+  state.income       = entry.baseIncome  || entry.income || 0;
+  state.extraIncomes = entry.extraIncomeItems ? [...entry.extraIncomeItems] : [];
+  state.expenses     = entry.expenseItems     ? [...entry.expenseItems]     : [];
+
+  document.getElementById('incomeInput').value = state.income || '';
+  updateEditModeUI(true);
+  render();
+
+  switchTab('week');
+  window.scrollTo({ top:0, behavior:'smooth' });
+  toast(`✏️ Editando Semana ${entry.weekNum} — presiona "Guardar Cambios" cuando termines`);
+}
+
+/* ════════════════════════════════════════
+   EDICIÓN HISTÓRICA — GUARDAR
+   ─────────────────────────────────────
+   1. Recalcula totales con los datos editados
+   2. Sobrescribe el registro en state.history
+   3. Ajusta state.savings con la diferencia
+   4. Restaura la semana actual desde prevState
+   5. Desactiva el modo edición
+════════════════════════════════════════ */
+function saveHistoricalEdit() {
+  const idx   = editMode.historyIdx;
+  const entry = state.history[idx];
+  if (!entry) { cancelHistoricalEdit(); return; }
+
+  const newBaseIncome = state.income;
+  const newTotalInc   = totalInc();
+  const newTotalExp   = totalExp();
+  const newBalance    = newTotalInc - newTotalExp;
+  const newSaved      = Math.max(0, newBalance * 0.35);
+
+  /* Ajuste bóveda: quitar ahorro viejo, sumar nuevo */
+  if (editMode.savedAmount > 0 || newSaved > 0) {
+    state.savings = Math.max(0, state.savings - editMode.savedAmount + newSaved);
+  }
+
+  state.history[idx] = {
+    ...entry,
+    baseIncome:       newBaseIncome,
+    income:           newTotalInc,
+    expenses:         newTotalExp,
+    balance:          newBalance,
+    savedAmount:      newSaved,
+    expenseItems:     [...state.expenses],
+    extraIncomeItems: [...state.extraIncomes],
+    editedAt:         new Date().toISOString()
+  };
+
+  /* Restaurar semana actual */
+  state.income       = editMode.prevState.income;
+  state.extraIncomes = [...editMode.prevState.extraIncomes];
+  state.expenses     = [...editMode.prevState.expenses];
+
+  const wn = editMode.weekNum;
+  editMode = { active:false, historyIdx:-1, weekNum:0, savedAmount:0, prevState:null };
+
+  save();
+  updateEditModeUI(false);
+  render();
+  document.getElementById('incomeInput').value = state.income || '';
+  toast(`✅ Semana ${wn} actualizada en el historial`);
+}
+
+/* ════════════════════════════════════════
+   EDICIÓN HISTÓRICA — CANCELAR
+════════════════════════════════════════ */
+function cancelHistoricalEdit() {
+  if (!editMode.active) return;
+
+  state.income       = editMode.prevState.income;
+  state.extraIncomes = [...editMode.prevState.extraIncomes];
+  state.expenses     = [...editMode.prevState.expenses];
+
+  const wn = editMode.weekNum;
+  editMode = { active:false, historyIdx:-1, weekNum:0, savedAmount:0, prevState:null };
+
+  updateEditModeUI(false);
+  render();
+  document.getElementById('incomeInput').value = state.income || '';
+  toast(`↩️ Edición de la Semana ${wn} cancelada — sin cambios`);
+}
+
+/* ── Sincroniza banner, botón principal y badge del header ── */
+function updateEditModeUI(isEditing) {
+  const banner    = document.getElementById('editHistoryBanner');
+  const btnMain   = document.getElementById('btnCloseOrSave');
+  const btn       = document.getElementById('weekSelectorBtn');
+
+  if (isEditing) {
+    banner.classList.add('active');
+    document.getElementById('ehbTitle').textContent =
+      `✏️  Modificando Semana ${editMode.weekNum} (Histórica)`;
+
+    btnMain.innerHTML = `💾 Guardar Cambios de la Semana ${editMode.weekNum}`;
+    btnMain.className = 'btn btn-primary';
+
+    /* Badge del selector: tintado dorado + número de semana editada */
+    document.getElementById('weekBadgeLabel').textContent = `Editando S${editMode.weekNum}`;
+    btn.classList.add('edit-mode');
+    btn.classList.remove('open');
+  } else {
+    banner.classList.remove('active');
+    btnMain.innerHTML = '🔒 Cerrar Semana';
+    btnMain.className = 'btn btn-gold';
+
+    document.getElementById('weekBadgeLabel').textContent = `Semana ${state.week}`;
+    btn.classList.remove('edit-mode');
+  }
+}
+
+/* ════════════════════════════════════════
+   CHART — CATEGORIAS (doughnut)
+════════════════════════════════════════ */
+let chartCat = null;
+const CAT_COLORS_BASE = {
+  'Gasolina':'#4fffb0','Comida':'#ff6b6b','Ocio':'#ffc75f',
+  'Servicios':'#a78bfa','Salud':'#34d399','Educación':'#60a5fa',
+  'Ropa':'#f472b6','Transporte':'#fb923c','Novia':'#f9a8d4',
+  'Amigos':'#fdba74','Otros':'#94a3b8',
+};
+function catColor(cat) {
+  if (cat.startsWith('Otros')) return CAT_COLORS_BASE['Otros'];
+  return CAT_COLORS_BASE[cat] || '#94a3b8';
+}
+const tooltipDefaults = {
+  backgroundColor:'#151820',borderColor:'#252a38',borderWidth:1,
+  titleColor:'#e8eaf0',bodyColor:'#4fffb0',bodyFont:{family:'DM Mono'},
+  callbacks:{ label: c=>' '+fmt(typeof c.parsed==='number'?c.parsed:c.parsed.y) }
+};
+function renderCategoryChart() {
+  const totals={};
+  state.expenses.forEach(e=>{ totals[e.cat]=(totals[e.cat]||0)+e.amount; });
+  const labels=Object.keys(totals);
+  const data=Object.values(totals);
+  const colors=labels.map(catColor);
+  const ctx=document.getElementById('categoryChart').getContext('2d');
+  if (chartCat) chartCat.destroy();
+  if (!labels.length) {
+    chartCat=null;
+    ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+    ctx.fillStyle='#4b5563';ctx.font='14px DM Mono,monospace';ctx.textAlign='center';
+    ctx.fillText('Sin gastos para mostrar',ctx.canvas.width/2,120);
+    return;
+  }
+  chartCat=new Chart(ctx,{
+    type:'doughnut',
+    data:{ labels, datasets:[{ data,backgroundColor:colors,borderColor:'#1b1f2b',borderWidth:3,hoverOffset:8 }] },
+    options:{
+      responsive:true,maintainAspectRatio:true,cutout:'65%',
+      plugins:{
+        legend:{ position:'bottom',labels:{ color:'#9ca3af',font:{family:'DM Mono',size:11},padding:14,usePointStyle:true } },
+        tooltip:tooltipDefaults
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════
+   RENDER — SEMANA ACTUAL
+════════════════════════════════════════ */
+function render() {
+  const ti=totalInc(), te=totalExp(), bal=balance(), ps=projSav(), bs=baseSav();
+
+  /* Badge (si no estamos en modo edición, updateEditModeUI lo controla en ese caso) */
+  if (!editMode.active) {
+    document.getElementById('weekBadgeLabel').textContent = `Semana ${state.week}`;
+    document.getElementById('weekInfo').textContent =
+      `Semana ${state.week} activa · ISAVEPC`;
+  } else {
+    document.getElementById('weekInfo').textContent =
+      `⚠️ Editando Semana ${editMode.weekNum} (histórica) — presiona "Guardar Cambios" al terminar`;
+  }
+
+  document.getElementById('statIncome').textContent   = fmt(ti);
+  document.getElementById('statExpenses').textContent = fmt(te);
+  document.getElementById('statSavingBase').textContent = fmt(bs);
+  document.getElementById('statSaving').textContent   = fmt(ps);
+
+  const balEl = document.getElementById('statBalance');
+  balEl.textContent = fmt(bal);
+  balEl.className   = 'value '+(bal>=0?'green':'red');
+
+  document.getElementById('totalSavings').textContent = fmt(state.savings);
+
+  /* Progreso */
+  const pw=document.getElementById('progressWrap');
+  if (ti>0) {
+    const pct=Math.min(100,(te/ti)*100);
+    pw.style.display='block';
+    document.getElementById('progressFill').style.width=pct+'%';
+    document.getElementById('progressFill').className='progress-fill'+(pct>80?' danger':'');
+    document.getElementById('progressPct').textContent=pct.toFixed(0)+'%';
+  } else { pw.style.display='none'; }
+
+  /* Extras */
+  document.getElementById('extraIncomeList').innerHTML =
+    state.extraIncomes.map(e=>`
+      <div class="extra-item">
+        <span class="ei-desc">${escHtml(e.desc)}</span>
+        <span class="ei-amt">+${fmt(e.amount)}</span>
+        <button class="delete-btn" onclick="deleteExtraIncome(${e.id})" title="Eliminar">✕</button>
+      </div>`).join('');
+
+  /* Gastos */
+  const el=document.getElementById('expenseList');
+  if (!state.expenses.length) {
+    el.innerHTML='<div class="empty-state">Sin gastos registrados esta semana</div>';
+  } else {
+    el.innerHTML=[...state.expenses].reverse().map(e=>`
+      <div class="expense-item">
+        <div class="info">
+          <div class="desc">${escHtml(e.desc)}</div>
+          <div class="cat">${escHtml(e.cat)}</div>
+        </div>
+        <div class="amount">${fmt(e.amount)}</div>
+        <button class="delete-btn" onclick="deleteExpense(${e.id})" title="Eliminar">✕</button>
+      </div>`).join('');
+  }
+  renderCategoryChart();
+}
+
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ════════════════════════════════════════
+   REPORTS
+════════════════════════════════════════ */
+let chartMonthly=null, chartAnnual=null;
+let currentPeriod='weekly';
+
+function switchPeriod(evt, period) {
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  evt.currentTarget.classList.add('active');
+  document.querySelectorAll('.rep-panel').forEach(p=>p.classList.remove('active-panel'));
+  document.getElementById('rep'+capitalize(period)).classList.add('active-panel');
+  currentPeriod=period;
+  if (period==='weekly')  renderWeeklyReport();
+  if (period==='monthly') renderMonthlyReport();
+  if (period==='annual')  renderAnnualReport();
+}
+const capitalize = s => s.charAt(0).toUpperCase()+s.slice(1);
+
+function renderReports() {
+  if (currentPeriod==='weekly')  renderWeeklyReport();
+  if (currentPeriod==='monthly') renderMonthlyReport();
+  if (currentPeriod==='annual')  renderAnnualReport();
+}
+
+function renderWeeklyReport() {
+  const h=state.history;
+  const tI=h.reduce((s,w)=>s+w.income,0);
+  const tE=h.reduce((s,w)=>s+w.expenses,0);
+  const tS=h.reduce((s,w)=>s+w.savedAmount,0);
+  document.getElementById('weeklySummary').innerHTML=stripRow(tI,tE,tS);
+  const grid=document.getElementById('historyGrid');
+  if (!h.length) {
+    grid.innerHTML='<div class="empty-state" style="grid-column:1/-1">Sin semanas cerradas aún — cierra tu primera semana para ver el historial</div>';
+    return;
+  }
+  grid.innerHTML=[...h].reverse().map((w, ri)=>{
+    const realIdx  = h.length - 1 - ri;
+    const editedTag = w.editedAt
+      ? `<div class="whc-date" style="color:rgba(167,139,250,.65)">✏️ Editada: ${fmtDate(w.editedAt)}</div>`
+      : '';
+    return `
+    <div class="week-hist-card">
+      <div class="whc-num">SEMANA #${w.weekNum}</div>
+      <div class="whc-date">Cerrada: ${fmtDate(w.closedAt)}</div>
+      ${editedTag}
+      <div class="whc-row"><span class="whc-label">Ingresos</span><span class="whc-val green">${fmt(w.income)}</span></div>
+      <div class="whc-row"><span class="whc-label">Gastos</span><span class="whc-val red">${fmt(w.expenses)}</span></div>
+      <div class="whc-row"><span class="whc-label">Sobrante</span><span class="whc-val ${w.balance>=0?'green':'red'}">${fmt(w.balance)}</span></div>
+      <div class="whc-row"><span class="whc-label">Ahorrado</span><span class="whc-val gold">${fmt(w.savedAmount)}</span></div>
+      <button class="whc-edit-btn" onclick="startHistoricalEdit(${realIdx})">✏️ Editar semana</button>
+    </div>`;
+  }).join('');
+}
+
+function stripRow(tI,tE,tS) {
+  return `
+    <div class="ss-box"><div class="ss-label">Total Ingresado</div><div class="ss-val green">${fmt(tI)}</div></div>
+    <div class="ss-box"><div class="ss-label">Total Gastado</div><div class="ss-val red">${fmt(tE)}</div></div>
+    <div class="ss-box"><div class="ss-label">Total Ahorrado</div><div class="ss-val gold">${fmt(tS)}</div></div>`;
+}
+
+function aggregateBy(keyFn) {
+  const map={};
+  state.history.forEach(w=>{
+    const k=keyFn(w);
+    if (!map[k]) map[k]={label:k,income:0,expenses:0,saved:0};
+    map[k].income+=w.income; map[k].expenses+=w.expenses; map[k].saved+=w.savedAmount;
+  });
+  return Object.values(map);
+}
+
+function barChartOptions() {
+  return {
+    responsive:true,maintainAspectRatio:false,
+    scales:{
+      x:{ ticks:{color:'#9ca3af',font:{family:'DM Mono',size:11}},grid:{color:'#252a38'} },
+      y:{ ticks:{color:'#9ca3af',font:{family:'DM Mono',size:11},callback:v=>'$'+v},grid:{color:'#252a38'} }
+    },
+    plugins:{
+      legend:{ position:'bottom',labels:{color:'#9ca3af',font:{family:'DM Mono',size:11},padding:14,usePointStyle:true} },
+      tooltip:{ ...tooltipDefaults, callbacks:{ label: c=>` ${c.dataset.label}: ${fmt(c.parsed.y)}` } }
+    }
+  };
+}
+
+function buildBarChart(canvasId, prevChart, data) {
+  const ctx=document.getElementById(canvasId);
+  if (!ctx) return prevChart;
+  if (prevChart) prevChart.destroy();
+  if (!data.length) return null;
+  return new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:data.map(d=>d.label),
+      datasets:[
+        {label:'Ingresos', data:data.map(d=>d.income),  backgroundColor:'rgba(79,255,176,.7)', borderRadius:6},
+        {label:'Gastos',   data:data.map(d=>d.expenses),backgroundColor:'rgba(255,107,107,.7)',borderRadius:6},
+        {label:'Ahorrado', data:data.map(d=>d.saved),   backgroundColor:'rgba(255,199,95,.7)', borderRadius:6},
+      ]
+    },
+    options:barChartOptions()
+  });
+}
+
+function buildDetailList(data, containerId) {
+  const el=document.getElementById(containerId);
+  if (!el) return;
+  if (!data.length) { el.innerHTML='<div class="empty-state">Sin datos disponibles</div>'; return; }
+  el.innerHTML=data.map(d=>`
+    <div class="detail-row">
+      <span class="dr-label">${d.label}</span>
+      <span class="dr-nums">
+        <span>Ing: <span style="color:var(--accent)">${fmt(d.income)}</span></span>
+        <span>Gas: <span style="color:var(--accent2)">${fmt(d.expenses)}</span></span>
+        <span>Aho: <span style="color:var(--accent3)">${fmt(d.saved)}</span></span>
+      </span>
+    </div>`).join('');
+}
+
+function renderMonthlyReport() {
+  const data=aggregateBy(w=>{ const d=new Date(w.closedAt); return `${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`; });
+  const tI=data.reduce((s,d)=>s+d.income,0);
+  const tE=data.reduce((s,d)=>s+d.expenses,0);
+  const tS=data.reduce((s,d)=>s+d.saved,0);
+  document.getElementById('monthlySummary').innerHTML=stripRow(tI,tE,tS);
+  chartMonthly=buildBarChart('monthlyChart',chartMonthly,data);
+  buildDetailList(data,'monthlyDetail');
+}
+
+function renderAnnualReport() {
+  const data=aggregateBy(w=>new Date(w.closedAt).getFullYear().toString());
+  const tI=data.reduce((s,d)=>s+d.income,0);
+  const tE=data.reduce((s,d)=>s+d.expenses,0);
+  const tS=data.reduce((s,d)=>s+d.saved,0);
+  document.getElementById('annualSummary').innerHTML=stripRow(tI,tE,tS);
+  chartAnnual=buildBarChart('annualChart',chartAnnual,data);
+  buildDetailList(data,'annualDetail');
+}
+
+/* ════════════════════════════════════════
+   INIT — LISTENERS GLOBALES
+════════════════════════════════════════ */
+/* Cerrar dropdown al hacer clic fuera */
+document.addEventListener('click', e => {
+  if (dropdownOpen && !document.getElementById('weekSelectorWrap').contains(e.target)) {
+    closeWeekDropdown();
+  }
+});
+
+/* Cerrar modales con Escape */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal('modalCloseWeek');
+    closeModal('modalResetWeek');
+    closeModal('modalHardReset');
+    closeWeekDropdown();
+  }
+});
+
+document.getElementById('modalCloseWeek').addEventListener('click', function(e){
+  if(e.target===this) closeModal('modalCloseWeek');
+});
+document.getElementById('modalResetWeek').addEventListener('click', function(e){
+  if(e.target===this) closeModal('modalResetWeek');
+});
+document.getElementById('modalHardReset').addEventListener('click', function(e){
+  if(e.target===this) closeModal('modalHardReset');
+});
+
+/* ════════════════════════════════════════
+   HARD RESET
+════════════════════════════════════════ */
+function openHardReset() {
+  document.getElementById('hardResetInput').value = '';
+  const btn = document.getElementById('btnConfirmHardReset');
+  btn.disabled = true;
+  btn.style.opacity = '.4';
+  btn.style.cursor  = 'not-allowed';
+  openModal('modalHardReset');
+  setTimeout(()=>document.getElementById('hardResetInput').focus(), 250);
+}
+
+function onHardResetInput() {
+  const val = document.getElementById('hardResetInput').value.trim().toUpperCase();
+  const btn = document.getElementById('btnConfirmHardReset');
+  const inp = document.getElementById('hardResetInput');
+  if (val === 'BORRAR') {
+    btn.disabled     = false;
+    btn.style.opacity = '1';
+    btn.style.cursor  = 'pointer';
+    inp.classList.add('valid');
+  } else {
+    btn.disabled     = true;
+    btn.style.opacity = '.4';
+    btn.style.cursor  = 'not-allowed';
+    inp.classList.remove('valid');
+  }
+}
+
+function confirmHardReset() {
+  const val = document.getElementById('hardResetInput').value.trim().toUpperCase();
+  if (val !== 'BORRAR') return;
+  /* Borra todas las llaves conocidas de ISAVEPC + legacy */
+  ['isavepc_v1', 'fp_v2_data', 'fp_income', 'fp_expenses', 'fp_savings', 'fp_week']
+    .forEach(k => localStorage.removeItem(k));
+  /* Recarga para estado de fábrica */
+  location.reload();
+}
+
+render();
+</script>
+</body>
+</html>
